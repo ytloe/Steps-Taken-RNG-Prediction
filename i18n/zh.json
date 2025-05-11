@@ -1,0 +1,21 @@
+{
+  "DisplaySteps": "总步数",
+  "DisplayLuck": "明天的运气",
+  "DisplayIslandWeather": "姜岛后天的天气(暂无)",
+  "DisplayWeather": "鹈鹕镇后天的天气(暂无)",
+  "DisplayGift": "明天的邮礼对象",
+  "DisplayDish": "明天的特色菜",
+  "DisplayThander": "后天是否雷雨",
+  "DisplaySearch": "Searching For？？",
+  "Config.ModEnabled": "开关预测框快捷键",
+  "Config.ModEnabled.Tooltip": "控制预测框显示的快捷键组合",
+  "Config.HorizontalOffset": "水平偏移",
+  "Config.HorizontalOffset.Tooltip": "调整预测框的水平位置",
+  "Config.VerticalOffset": "垂直偏移",
+  "Config.VerticalOffset.Tooltip": "调整预测框的垂直位置",
+  "Config.DisplaySteps": "显示步数统计",
+  "Config.DisplayLuck": "显示运气预测",
+  "Config.DisplayGift": "显示邮件预测",
+  "Config.DisplayDish": "显示特色菜预测",
+  "Config.DisplayThander": "显示后天雷雨预测"
+}

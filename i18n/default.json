@@ -1,0 +1,21 @@
+﻿{
+  "DisplaySteps": "Steps Taken",
+  "DisplayLuck": "Luck Tomorrow",
+  "DisplayIslandWeather": "Island Weather Aftermorrow(Not yet)",
+  "DisplayWeather": "Weather Aftermorrow(Not yet)",
+  "DisplayGift": "Mail Gift",
+  "DisplayDish": "Dish of the Day",
+  "DisplayThander": "Weather Aftermorrow",
+  "DisplaySearch": "Searching For",
+  "Config.ModEnabled": "Toggle Prediction Box Shortcut",
+  "Config.ModEnabled.Tooltip": "Keyboard shortcut combination to control prediction box visibility",
+  "Config.HorizontalOffset": "Horizontal Offset",
+  "Config.HorizontalOffset.Tooltip": "Adjust the horizontal position of the prediction box",
+  "Config.VerticalOffset": "Vertical Offset",
+  "Config.VerticalOffset.Tooltip": "Adjust the vertical position of the prediction box",
+  "Config.DisplaySteps": "Display step count",
+  "Config.DisplayLuck": "Display luck prediction",
+  "Config.DisplayGift": "Display mail sender prediction",
+  "Config.DisplayDish": "Display special dish prediction",
+  "Config.DisplayThander": "Display Thander prediction"
+}
