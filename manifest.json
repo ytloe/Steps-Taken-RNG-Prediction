@@ -1,8 +1,8 @@
 {
-  "Name": "Steps Taken RNG Prediction On Screen",
+  "Name": "Ytloe's Steps Taken RNG Prediction",
   "Author": "Ytloe",
-  "Version": "4.0.1",
-  "Description": "基本上完全重构了Blade的StepsTakenRNGPrediction，支持配置菜单和i18n以及更强的拓展性",
+  "Version": "4.3.0",
+  "Description": "完全重构了Blade的StepsTakenRNGPrediction，支持配置菜单和i18n以及更强的拓展性",
   "UniqueID": "Ytloe.StepsTakenOnScreen",
   "EntryDll": "StepsTakenOnScreen.dll",
   "Dependencies": [
@@ -12,5 +12,7 @@
     }
   ],
   "MinimumApiVersion": "2.10.0",
-  "UpdateKeys": []
+  "UpdateKeys": [
+    "nexus:33896"
+  ]
 }

@@ -14,11 +14,13 @@ internal class ModConfig
 
 	public bool DisplayDish { get; set; } = true;
 
-	public bool DisplayThander { get; set; } = true;
+    public bool DisplayWeather { get; set; } = true;
+
+    public bool DisplayThunder { get; set; } = false;
 
     public Point PositionOffset { get; set; } = new Point(300, 0);
 
-    public double TargetLuck { get; set; } = -1.0;
+    public double TargetLuck { get; set; } = -0.101;
 
 	public string TargetGifter { get; set; } = "";
 
@@ -32,4 +34,6 @@ internal class ModConfig
     public KeybindList ToggleKey { get; set; } = new KeybindList(
         new Keybind(SButton.P, SButton.LeftControl)
     );
+
+    public bool WantStorm { get; set; } = false;
 }
