@@ -8,29 +8,36 @@ using Microsoft.Xna.Framework.Graphics;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
-using StardewValley.Delegates;
-using StardewValley.Extensions;
-using StardewValley.GameData;
-using StardewValley.Objects;
 using StardewValley.TokenizableStrings;
 using System;
 using System.Linq;
 using System.Collections.Generic;
-using StardewValley.GameData.LocationContexts;
-using System.Globalization;
-using StardewModdingAPI.Utilities;
+using StardewValley.Objects;
+using StardewValley.Extensions;
 using StardewValley.Locations;
+using StardewValley.GameData.LocationContexts;
+using System.Diagnostics.Metrics;
+using StardewModdingAPI.Utilities;
+using StardewValley.GameData.Machines;
 
 namespace StepsTakenOnScreen
 {
-    public struct PredictionResult
+    public struct PredictionResult : IEquatable<PredictionResult>
     {
         public double DailyLuck;
         public string DishOfTheDayId;
         public int DishOfTheDayAmount;
         public string MailSenderName;
-        public bool IsRainyDayAfterTomorrow;
-        public bool WillBeStormyDayAfterTomorrow;
+        public string WeatherAfterTomorrow;
+
+        public bool Equals(PredictionResult other)
+        {
+            return this.DailyLuck == other.DailyLuck &&
+                   this.DishOfTheDayId == other.DishOfTheDayId &&
+                   this.DishOfTheDayAmount == other.DishOfTheDayAmount &&
+                   this.MailSenderName == other.MailSenderName &&
+                   this.WeatherAfterTomorrow== other.WeatherAfterTomorrow; 
+        }
     }
 
     public class ModEntry : Mod
@@ -41,9 +48,13 @@ namespace StepsTakenOnScreen
         private bool targetSearchCriteriaMet = false;
         private HashSet<int> futureRainyTotalDays = new HashSet<int>();
         private List<string> futureRainyDaysDisplay = new List<string>();
+
+        // --- 状态监听缓存 ---
         private int lastPredictedSteps = -1;
-        private uint lastPredictedDaysPlayed = 0;
+
+        // --- 搜索框重算监听 ---
         private bool needsNewTargetSearch = true;
+
         private string[] targetDishIds;
         private string[] targetGifterNames;
         private bool predictionBoxVisible = true;
@@ -58,7 +69,6 @@ namespace StepsTakenOnScreen
             helper.Events.Display.RenderedHud += OnRenderedHud;
             helper.Events.Input.ButtonsChanged += OnButtonsChanged;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
-            helper.Events.Input.ButtonReleased += OnButtonReleased;
         }
 
         #region 事件处理方法
@@ -73,24 +83,23 @@ namespace StepsTakenOnScreen
                 reset: () => {
                     this.Config = new ModConfig();
                     UpdateConfigDerivedVariables();
-                    this.lastPredictedSteps = -1;
-                    this.needsNewTargetSearch = true;
+                    this.ForceFullUpdate();
                 },
                 save: () => {
                     this.Helper.WriteConfig(this.Config);
                     UpdateConfigDerivedVariables();
-                    this.lastPredictedSteps = -1;
-                    this.needsNewTargetSearch = true;
+                    this.ForceFullUpdate();
                 }
             );
 
+            // 所有的Config UI绑定
             configMenu.AddSectionTitle(mod: this.ModManifest, text: () => "显示设置");
-            configMenu.AddBoolOption(mod: this.ModManifest, name: () => this.Helper.Translation.Get("DisplaySteps"), tooltip: () => "是否在预测框中显示当前的步数。", getValue: () => this.Config.DisplaySteps, setValue: value => this.Config.DisplaySteps = value);
-            configMenu.AddBoolOption(mod: this.ModManifest, name: () => this.Helper.Translation.Get("DisplayLuck"), tooltip: () => "是否在预测框中显示明天的运气值。", getValue: () => this.Config.DisplayLuck, setValue: value => this.Config.DisplayLuck = value);
-            configMenu.AddBoolOption(mod: this.ModManifest, name: () => this.Helper.Translation.Get("DisplayGift"), tooltip: () => "是否在预测框中显示明天可能送礼的村民。", getValue: () => this.Config.DisplayGift, setValue: value => this.Config.DisplayGift = value);
-            configMenu.AddBoolOption(mod: this.ModManifest, name: () => this.Helper.Translation.Get("DisplayDish"), tooltip: () => "是否在预测框中显示明天酒吧的特色菜。", getValue: () => this.Config.DisplayDish, setValue: value => this.Config.DisplayDish = value);
-            configMenu.AddBoolOption(mod: this.ModManifest, name: () => this.Helper.Translation.Get("DisplayWeather"), tooltip: () => "是否在预测框中显示未来7天的雨天。", getValue: () => this.Config.DisplayWeather, setValue: value => this.Config.DisplayWeather = value);
-            configMenu.AddBoolOption(mod: this.ModManifest, name: () => "显示雷雨预测", tooltip: () => "是否显示未来雨天，以及后天是否可控为雷雨。", getValue: () => this.Config.DisplayThunder, setValue: value => this.Config.DisplayThunder = value);
+            configMenu.AddBoolOption(mod: this.ModManifest, name: () => this.Helper.Translation.Get("Config.DisplaySteps"), getValue: () => this.Config.DisplaySteps, setValue: value => this.Config.DisplaySteps = value);
+            configMenu.AddBoolOption(mod: this.ModManifest, name: () => this.Helper.Translation.Get("Config.DisplayLuck"), getValue: () => this.Config.DisplayLuck, setValue: value => this.Config.DisplayLuck = value);
+            configMenu.AddBoolOption(mod: this.ModManifest, name: () => this.Helper.Translation.Get("Config.DisplayGift"), getValue: () => this.Config.DisplayGift, setValue: value => this.Config.DisplayGift = value);
+            configMenu.AddBoolOption(mod: this.ModManifest, name: () => this.Helper.Translation.Get("Config.DisplayDish"), getValue: () => this.Config.DisplayDish, setValue: value => this.Config.DisplayDish = value);
+            configMenu.AddBoolOption(mod: this.ModManifest, name: () => this.Helper.Translation.Get("Config.DisplayWeather"), getValue: () => this.Config.DisplayWeather, setValue: value => this.Config.DisplayWeather = value);
+            configMenu.AddBoolOption(mod: this.ModManifest, name: () => this.Helper.Translation.Get("Config.DisplayStorm"), getValue: () => this.Config.DisplayStorm, setValue: value => this.Config.DisplayStorm = value);
 
             configMenu.AddSectionTitle(mod: this.ModManifest, text: () => "位置偏移");
             configMenu.AddNumberOption(mod: this.ModManifest, name: () => this.Helper.Translation.Get("HorizontalOffset"), getValue: () => this.Config.PositionOffset.X, setValue: value => this.Config.PositionOffset = new Point(value, this.Config.PositionOffset.Y));
@@ -110,8 +119,7 @@ namespace StepsTakenOnScreen
 
         private void OnDayStarted(object sender, DayStartedEventArgs e)
         {
-            this.needsNewTargetSearch = true;
-            UpdateFutureRainyDays();
+            this.ForceFullUpdate();
         }
 
         private void OnButtonsChanged(object sender, ButtonsChangedEventArgs e)
@@ -129,16 +137,7 @@ namespace StepsTakenOnScreen
                 this.Config = base.Helper.ReadConfig<ModConfig>();
                 UpdateConfigDerivedVariables();
                 this.Monitor.Log("配置已重新加载", LogLevel.Info);
-                this.lastPredictedSteps = -1;
-                this.needsNewTargetSearch = true;
-            }
-        }
-
-        private void OnButtonReleased(object sender, ButtonReleasedEventArgs e)
-        {
-            if (Context.IsWorldReady && (e.Button.IsActionButton() || e.Button.IsUseToolButton()))
-            {
-                Vector2 tile = e.Cursor.GrabTile;
+                this.ForceFullUpdate();
             }
         }
 
@@ -149,64 +148,131 @@ namespace StepsTakenOnScreen
             UpdatePredictionsIfNeeded();
             UpdateTargetSearchIfNeeded();
 
-            string displayText = BuildPredictionDisplayString();
-            if (!string.IsNullOrEmpty(displayText))
+            List<IFormattedText> displayBlocks = BuildPredictionDisplayBlocks();
+            if (displayBlocks.Count > 0)
             {
-                DrawHelper.DrawHoverBox(e.SpriteBatch, displayText, new Vector2(Config.PositionOffset.X, Config.PositionOffset.Y), Game1.viewport.Width);
+                DrawHelper.DrawHoverBox(e.SpriteBatch, displayBlocks, new Vector2(Config.PositionOffset.X, Config.PositionOffset.Y), Game1.viewport.Width);
             }
+        }
+
+        private void ForceFullUpdate()
+        {
+            this.lastPredictedSteps = -1;
+            this.needsNewTargetSearch = true;
         }
 
         #endregion
 
         #region 天气预测系统
 
-        private string PredictWeatherForDate(WorldDate date)
+        // 专门预测婚礼的辅助方法
+        private bool IsWeddingDay(WorldDate date)
         {
-            string hardcodedWeather = Game1.getWeatherModificationsForDate(date, "Sun");
-            if (hardcodedWeather != "Sun")
+            if (!Game1.canHaveWeddingOnDay(date.DayOfMonth, date.Season)) return false;
+
+            // 计算距离预测天数还有几天
+            int daysUntil = date.TotalDays - Game1.Date.TotalDays;
+            if (daysUntil < 0) return false;
+
+            foreach (Farmer farmer in Game1.getAllFarmers())
             {
-                return hardcodedWeather;
+                if (farmer.spouse != null && farmer.isEngaged())
+                {
+                    if (farmer.friendshipData.TryGetValue(farmer.spouse, out Friendship f) && f.CountdownToWedding == daysUntil)
+                        return true;
+                }
+                if (farmer.team.IsEngaged(farmer.UniqueMultiplayerID))
+                {
+                    long? spouse = farmer.team.GetSpouse(farmer.UniqueMultiplayerID);
+                    if (spouse.HasValue)
+                    {
+                        var f2 = Game1.player.team.GetFriendship(farmer.UniqueMultiplayerID, spouse.Value);
+                        if (f2 != null && f2.CountdownToWedding == daysUntil)
+                            return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // 整合了您提供的所有硬编码、节日、雨水图腾以及常规天气的字符串返回
+        private string PredictWeatherForDate(WorldDate date, out bool unchangeable)
+        {
+            unchangeable = false;
+            string weather = "Sun";
+
+            // 1. 雨水图腾检查：仅影响明天（TotalDays + 1）
+            if (date.TotalDays == Game1.Date.TotalDays + 1 && Game1.weatherForTomorrow == "Rain")
+            {
+                unchangeable = true;
+                weather = "Rain";
             }
 
+            // 2. 原版硬编码天气检查（复刻 getWeatherModificationsForDate 逻辑）
+
+            int day_offset = date.TotalDays - Game1.Date.TotalDays;
+
+            if (date.DayOfMonth == 1 || Game1.stats.DaysPlayed + day_offset <= 4) { weather = "Sun"; unchangeable = true; }
+            if (Game1.stats.DaysPlayed + day_offset == 3) { weather = "Rain"; unchangeable = true; }
+            if (Utility.isGreenRainDay(date.DayOfMonth, date.Season)) { weather = "GreenRain"; unchangeable = true; }
+            if (date.Season == Season.Summer && date.DayOfMonth % 13 == 0) { weather = "Storm"; unchangeable = true; }
+            if (Utility.isFestivalDay(date.DayOfMonth, date.Season)) { weather = "Festival"; unchangeable = true; }
+
+            // 被动节日检查
+            foreach (var festival in DataLoader.PassiveFestivals(Game1.content).Values)
+            {
+                if (date.DayOfMonth < festival.StartDay || date.DayOfMonth > festival.EndDay
+                    || date.Season != festival.Season
+                    || !GameStateQuery.CheckConditions(festival.Condition)
+                    || festival.MapReplacements == null)
+                    continue;
+
+                foreach (string key in festival.MapReplacements.Keys)
+                {
+                    var loc = Game1.getLocationFromName(key);
+                    if (loc != null && loc.InValleyContext())
+                    {
+                        weather = "Sun";
+                        unchangeable = true;
+                        break;
+                    }
+                }
+            }
+
+            // 3. 婚礼检查（婚礼覆盖一切天气为晴天/Wedding）
+            if (IsWeddingDay(date))
+            {
+                weather = "Wedding";
+                unchangeable = true;
+            }
+
+            if (unchangeable) { return weather; }
+
+            // 4. 常规天气判断（完全使用您提供的代码，剔除了对其他逻辑的影响）
             switch (date.Season)
             {
                 case Season.Summer:
-                    Random r = Utility.CreateRandom(date.Year * 777, Game1.uniqueIDForThisGame);
-                    int[] possible_days = new int[] { 5, 6, 7, 14, 15, 16, 18, 23 };
-                    if (date.DayOfMonth == r.ChooseFrom(possible_days))
                     {
-                        return "GreenRain";
+                        int seed = Utility.CreateRandomSeed(date.TotalDays, Game1.uniqueIDForThisGame / 2, Game1.hash.GetDeterministicHashCode("summer_rain_chance"));
+                        Random random = new Random(seed);
+                        float chance = 0.12f + (float)date.DayOfMonth * 0.003f;
+                        return random.NextDouble() < chance ? "Rain" : "Sun";
                     }
-
-                    int summerSeed = Utility.CreateRandomSeed(date.TotalDays, (int)Game1.uniqueIDForThisGame / 2, Game1.hash.GetDeterministicHashCode("summer_rain_chance"));
-                    Random summerRng = new Random(summerSeed);
-                    float summerChance = 0.12f + (float)date.DayOfMonth * 0.003f;
-                    if (summerRng.NextDouble() < summerChance)
-                    {
-                        return "Rain";
-                    }
-                    break;
                 case Season.Spring:
                 case Season.Fall:
-                    int springFallSeed = Utility.CreateRandomSeed(Game1.hash.GetDeterministicHashCode("location_weather"), (int)Game1.uniqueIDForThisGame, date.TotalDays);
-                    Random springFallRng = new Random(springFallSeed);
-                    if (springFallRng.NextDouble() < 0.183f)
                     {
-                        return "Rain";
+                        int seed = Utility.CreateRandomSeed(date.TotalDays, Game1.uniqueIDForThisGame / 2, Game1.hash.GetDeterministicHashCode("location_weather"));
+                        Random random = new Random(seed);
+                        return random.NextDouble() < 0.183 ? "Rain" : "Sun";
                     }
-                    break;
-                case Season.Winter:
-                    int winterSeed = Utility.CreateRandomSeed(Game1.hash.GetDeterministicHashCode("location_weather"), (int)Game1.uniqueIDForThisGame, date.TotalDays);
-                    Random winterRng = new Random(winterSeed);
-                    if (winterRng.NextDouble() < 0.63f)
-                    {
-                        return "Snow";
-                    }
-                    break;
+                default:
+                    return "Sun";
             }
-            return "Sun";
         }
 
+        /// <summary>
+        /// 更新未来7天雨天列表
+        /// </summary>
         private void UpdateFutureRainyDays()
         {
             this.futureRainyDaysDisplay.Clear();
@@ -217,9 +283,10 @@ namespace StepsTakenOnScreen
             {
                 WorldDate futureDate = new WorldDate(today);
                 futureDate.TotalDays += i;
-                string predictedWeather = PredictWeatherForDate(futureDate);
 
-                if (predictedWeather == "Rain" || predictedWeather == "Storm" || predictedWeather == "GreenRain")
+                // [替换] 获取对应日期的天气字符串
+                string weather = PredictWeatherForDate(futureDate, out _);
+                if (weather == "Rain" || weather == "Storm" || weather == "GreenRain")
                 {
                     this.futureRainyTotalDays.Add(futureDate.TotalDays);
                     this.futureRainyDaysDisplay.Add(futureDate.DayOfMonth.ToString());
@@ -229,101 +296,168 @@ namespace StepsTakenOnScreen
 
         #endregion
 
-        #region 核心预测逻辑
+        /// <summary>
+        /// 模拟 Default 上下文天气条件对 Game1.random 的消耗，返回是否雷雨。
+        /// tomorrowDate: 过夜后的日期（即Game1.Date+1，过夜时的Game1.dayOfMonth状态）
+        /// nextDaysPlayed: 过夜后的DaysPlayed（Game1.stats.DaysPlayed+1）
+        /// </summary>
+        private bool SimulateDefaultWeatherRandom(
+            Random random,
+            WorldDate tomorrowDate,
+            uint nextDaysPlayed)
+        {
+            // 以下所有条件使用 tomorrowDate 的状态（过夜后的游戏状态）
+            Season season = tomorrowDate.Season;
+            int dayOfMonth = tomorrowDate.DayOfMonth;
+            bool daysPlayedOver28 = nextDaysPlayed >= 28;
+            switch (season)
+            {
+                case Season.Summer:
+                {
+                    // SummerStorm: RANDOM .85
+                    if (random.NextDouble() < 0.85)
+                        return true;
 
+                    // SummerStorm2: DAYS_PLAYED 28 && !day1 && !day2 → RANDOM .25
+                    if (daysPlayedOver28 && dayOfMonth != 1 && dayOfMonth != 2)
+                    {
+                        if (random.NextDouble() < 0.25)
+                            return true;
+                    }
+                    // SummerRain 命中，break
+                    break;
+                }
+
+                case Season.Spring:
+                case Season.Fall:
+                {
+                    // FallStorm: DAYS_PLAYED 28 && !day1 && !day2 → RANDOM .25
+                    if (daysPlayedOver28 && dayOfMonth != 1 && dayOfMonth != 2)
+                    {
+                        if (random.NextDouble() < 0.25)
+                            return true;
+                    }
+                    break;
+                    // FallRain 命中
+                }
+
+                case Season.Winter:
+                // WinterSnow: SYNCED → 无RANDOM消耗
+                break;
+
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 模拟 Island 上下文 random 消耗
+        /// </summary>
+        private bool SimulateIslandWeatherRandom(Random random, WorldDate tomorrowDate)
+        {
+            // Island的tomorrow同样是 tomorrowDate+1
+            WorldDate weatherTargetDate = new WorldDate(tomorrowDate);
+            weatherTargetDate.TotalDays += 1;
+
+            // 姜岛无节日，无需节日判断
+            // FirstVisitSun: !Visited_Island → 零消耗
+            if (!Game1.player.mailReceived.Contains("Visited_Island"))
+                return false;
+
+            // Rain: RANDOM .24 → 消耗1次
+            return random.NextDouble()<0.24;
+        }
+
+        #region 核心预测逻辑
         private PredictionResult PredictNextDayOutcomes(int stepsTaken)
         {
             PredictionResult result = new PredictionResult();
 
-            WorldDate dayAfterTomorrow = new WorldDate(Game1.Date);
-            dayAfterTomorrow.TotalDays += 2;
-            result.IsRainyDayAfterTomorrow = this.futureRainyTotalDays.Contains(dayAfterTomorrow.TotalDays);
-
-            // 1. 创建模拟明晚会使用的 random 对象
-            uint nextDay = Game1.stats.DaysPlayed + 1;
-            int seed = Utility.CreateRandomSeed((int)Game1.uniqueIDForThisGame / 100, nextDay * 10 + 1, stepsTaken);
+            // ===== 初始化随机数（与游戏完全一致）=====
+            uint nextDaysPlayed = Game1.stats.DaysPlayed + 1;
+            int seed = Utility.CreateRandomSeed(
+                (int)Game1.uniqueIDForThisGame / 100,
+                nextDaysPlayed * 10 + 1,
+                stepsTaken);
             Random random = Utility.CreateRandom(seed);
 
-            // 2. 模拟所有已知的、在天气判断之前的 RNG 消耗过程
-            // a. 日期消耗
+            // dayOfMonth循环（明天的dayOfMonth）
             int nextDayOfMonth = Game1.dayOfMonth + 1 > 28 ? 1 : Game1.dayOfMonth + 1;
             for (int i = 0; i < nextDayOfMonth; i++) random.Next();
 
-            // b. 特色菜消耗
+            // ===== UpdateDishOfTheDay =====
             string dishId;
-            do { dishId = random.Next(194, 240).ToString(); } while (Utility.IsForbiddenDishOfTheDay(dishId));
+            do { dishId = random.Next(194, 240).ToString(); }
+            while (Utility.IsForbiddenDishOfTheDay(dishId));
             result.DishOfTheDayId = dishId;
             result.DishOfTheDayAmount = random.Next(1, 4 + ((random.NextDouble() < 0.08) ? 10 : 0));
 
-            random.NextDouble();//不知名消耗
+            // ===== passTimeForObjects（隔夜加工）=====
+            random.NextDouble(); // 不知名固定消耗
+            int overnightMinutesElapsed = Utility.CalculateMinutesUntilMorning(Game1.timeOfDay);
 
-            // 遍历所有地点，模拟passTimeForObjects方法假人模特的消耗
-            foreach (GameLocation location in Game1.locations)
+            Utility.ForEachLocation(delegate (GameLocation location)
             {
-                foreach (KeyValuePair<Vector2, StardewValley.Object> objPair in location.netObjects.Pairs)
+                foreach (KeyValuePair<Vector2, StardewValley.Object> objPair in location.objects.Pairs)
                 {
                     var obj = objPair.Value;
-                    // 跳过不消耗随机数条件
-                    if (obj is Fence || obj is Furniture || obj.IsSprinkler()|| location == null)
-                        continue;
-                    // 手动处理Mannequin的特殊消耗
+                    if (obj is Fence || obj is Furniture || obj.IsSprinkler()) continue;
+
                     if (obj is Mannequin mannequin)
                     {
-                        if (random.NextDouble() < 0.001) // 0.1%触发条件
+                        DataLoader.Mannequins(Game1.content).TryGetValue(mannequin.ItemId, out var mdata);
+                        if (random.NextDouble() < 0.001 && mdata?.Cursed == true)
                         {
-                            DataLoader.Mannequins(Game1.content).TryGetValue(mannequin.ItemId, out var data);
-                            if (data?.Cursed == true)
+                            if (Game1.timeOfDay > Game1.getTrulyDarkTime(location))
                             {
-                                if (Game1.timeOfDay > Game1.getTrulyDarkTime(location))
-                                {
-                                    if (random.NextDouble() < 0.1) random.NextDouble(); // emitGhost
-                                }
-                                else if (random.NextDouble() < 0.66) random.NextDouble();
-                                else random.Next(500, 4000); // 震动消耗
+                                if (random.NextDouble() < 0.1) { }
+                                else if (random.NextDouble() < 0.66)
+                                { if (random.NextDouble() < 0.5) { } }
+                                else random.Next(500, 4000);
+                            }
+                            else
+                            {
+                                if (random.NextDouble() < 0.66)
+                                { if (random.NextDouble() < 0.5) { } }
+                                else random.Next(500, 4000);
                             }
                         }
                     }
-                    // 处理其他所有机器的通用消耗（包括假人和电话也都调用了Object.cs中的核心逻辑）
+
                     if (obj.heldObject.Value != null && obj.QualifiedItemId != "(BC)165")
                     {
                         var machineData = obj.GetMachineData();
-                        var minutesUntilReady = obj.minutesUntilReady.Value - (int) Utility.CalculateMinutesUntilMorning(Game1.timeOfDay);
                         bool readyForHarvest = false;
-                        if (minutesUntilReady <= 0 && (machineData == null || !machineData.OnlyCompleteOvernight || Game1.newDaySync.hasInstance()))
-                        {
+                        int minutesUntilReady = obj.MinutesUntilReady - overnightMinutesElapsed;
+                        if (minutesUntilReady <= 0 && (machineData == null || !machineData.OnlyCompleteOvernight))
                             readyForHarvest = true;
-                        }
-                        // 机器工作特效消耗
-                        if (machineData != null && !readyForHarvest && machineData.WorkingEffects != null)
+
+                        if (machineData != null)
                         {
-                            if (random.NextDouble() < machineData.WorkingEffectChance)
+                            if (!readyForHarvest && machineData.WorkingEffects != null
+                                && random.NextDouble() < (double)machineData.WorkingEffectChance)
                             {
-                                if (obj is WoodChipper && location.farmers.Any() && Game1.random.NextDouble() < 0.35)
+                                if (obj is WoodChipper && location.farmers.Any()
+                                    && random.NextDouble() < 0.35)
                                 {
-                                    for (int i = 0; i < 8; i++)
-                                    {
-                                        random.Next(-48, 0);
-                                    }
+                                    for (int i = 0; i < 8; i++) random.Next(-48, 0);
                                 }
                             }
                         }
-                        // 非机器类普通消耗（33%概率）
                         else if (!readyForHarvest && random.NextDouble() < 0.33)
                         {
-                            if (obj is WoodChipper && location.farmers.Any() && Game1.random.NextDouble() < 0.35)
+                            if (obj is WoodChipper && location.farmers.Any()
+                                && random.NextDouble() < 0.35)
                             {
-                                for (int i = 0; i < 8; i++)
-                                {
-                                    random.Next(-48, 0);
-                                }
+                                for (int i = 0; i < 8; i++) random.Next(-48, 0);
                             }
                         }
                     }
                 }
-            }
+                return true;
+            }, includeInteriors: true, includeGenerated: false);
 
+            // ===== 邮件送礼 =====
             result.MailSenderName = "";
-            // c. 好友邮件消耗
             if (Utility.TryGetRandom(Game1.player.friendshipData, out var whichFriend, out var friendship, random) &&
                 random.NextBool((double)(friendship.Points / 250) * 0.1) &&
                 Game1.player.spouse != whichFriend &&
@@ -331,65 +465,112 @@ namespace StepsTakenOnScreen
             {
                 result.MailSenderName = whichFriend;
             }
-            random.NextDouble();// dayupdate稻草人协会邮件消耗
-            // dayupdate诅咒假人换衣服消耗
+
+            random.NextDouble(); // 固定消耗
+
+            // Mannequin诅咒检查（当前位置）
             if (Game1.player.shirtItem.Value != null && Game1.player.pantsItem.Value != null &&
-                (
-                 (Game1.player.currentLocation is FarmHouse) ||
-                 (Game1.player.currentLocation is IslandFarmHouse) ||
-                 (Game1.player.currentLocation is Shed))
-                )
+                (Game1.player.currentLocation is FarmHouse ||
+                 Game1.player.currentLocation is IslandFarmHouse ||
+                 Game1.player.currentLocation is Shed))
             {
-                foreach (StardewValley.Object value in Game1.player.currentLocation.netObjects.Values)
+                foreach (StardewValley.Object value in Game1.player.currentLocation.objects.Values)
                 {
-                    if (value is Mannequin mannequin)
+                    if (value is Mannequin m2)
                     {
-                        DataLoader.Mannequins(Game1.content).TryGetValue(mannequin.ItemId, out var data);
-                        if (data?.Cursed == true)
-                        {
-                            random.NextDouble();
-                        }
+                        DataLoader.Mannequins(Game1.content).TryGetValue(m2.ItemId, out var mdata2);
+                        if (mdata2?.Cursed == true) random.NextDouble();
                     }
                 }
             }
 
-            // d. 每日运气消耗
-            result.DailyLuck = Math.Min(0.1, (double)random.Next(-100, 101) / 1000.0);
-            // e. 天气转化消耗
-            result.WillBeStormyDayAfterTomorrow = false;
-            if (result.IsRainyDayAfterTomorrow)
-            {
-                WorldDate tomorrow = new WorldDate(Game1.Date);
-                tomorrow.TotalDays += 1;
-                Season season = dayAfterTomorrow.Season;
-                bool isPastFirstSeason = (Game1.stats.DaysPlayed + 1) >= 28;
-                bool isAfterDay2 = tomorrow.DayOfMonth > 2;
+            // ===== 运气=====
+            result.DailyLuck = Math.Min(0.1,
+                (double)random.Next(-100, 101) / 1000.0);
 
-                if (season == Season.Summer)
+            //任务板生成物品大概率消耗1个随机数
+            random.NextDouble();
+            
+
+            // 过夜后的日期状态
+            WorldDate tomorrowDate = new WorldDate(Game1.Date);
+            tomorrowDate.TotalDays += 1;
+
+            // 换季Bush/Tree消耗（仅当明天是季节第1天）
+            if (tomorrowDate.DayOfMonth == 1)
+            {
+                if (tomorrowDate.Season == Season.Summer)
                 {
-                    if (random.NextDouble() < 0.85) { result.WillBeStormyDayAfterTomorrow = true; }
-                    else if (isPastFirstSeason && isAfterDay2 && random.NextDouble() < 0.25) { result.WillBeStormyDayAfterTomorrow = true; }
+                    Utility.ForEachLocation(delegate (GameLocation location)
+                    {
+                        foreach (var pair in location.terrainFeatures.Pairs)
+                            if (pair.Value is StardewValley.TerrainFeatures.Bush b
+                                && b.size.Value == 1)
+                                random.NextDouble();
+                        if (location.largeTerrainFeatures != null)
+                            foreach (var lf in location.largeTerrainFeatures)
+                                if (lf is StardewValley.TerrainFeatures.Bush lb
+                                    && lb.size.Value == 1)
+                                    random.NextDouble();
+                        return true;
+                    }, includeInteriors: true, includeGenerated: false);
                 }
-                else if (season == Season.Spring || season == Season.Fall)
+                if (tomorrowDate.Season == Season.Fall)
                 {
-                    if (isPastFirstSeason && isAfterDay2 && random.NextDouble() < 0.25) { result.WillBeStormyDayAfterTomorrow = true; }
+                    Utility.ForEachLocation(delegate (GameLocation location)
+                    {
+                        foreach (var pair in location.terrainFeatures.Pairs)
+                            if (pair.Value is StardewValley.TerrainFeatures.Tree tree
+                                && (tree.treeType.Value == "1" || tree.treeType.Value == "2")
+                                && tree.growthStage.Value >= 5
+                                && !tree.tapped.Value
+                                && !(location is StardewValley.Locations.Town)
+                                && !location.IsGreenhouse)
+                                random.NextDouble();
+                        return true;
+                    }, includeInteriors: false, includeGenerated: false);
                 }
             }
 
+            //random.NextDouble();
+
+            // 后天日期（用于天气查询）
+            WorldDate dayAfterTomorrow = new WorldDate(Game1.Date);
+            dayAfterTomorrow.TotalDays += 2;
+            // 上下文天气消耗随机数
+            bool simStorm = SimulateDefaultWeatherRandom(random, tomorrowDate, nextDaysPlayed);
+            bool IslandRain = SimulateIslandWeatherRandom(random, tomorrowDate);
+
+            string baseWeather = PredictWeatherForDate(dayAfterTomorrow, out bool unchangeable);
+
+            result.WeatherAfterTomorrow = baseWeather;
+            // 如果是强制天气，无视步数影响，直接赋值
+            if (!unchangeable && baseWeather == "Rain" && simStorm) { result.WeatherAfterTomorrow = "Storm"; }
+
+            // Desert：无消耗
+
             return result;
         }
-
         #endregion
 
-        #region UI更新与显示
+        #region UI更新与渲染构建
 
         private void UpdatePredictionsIfNeeded()
         {
-            if (this.lastPredictedSteps != (int)Game1.stats.StepsTaken || this.lastPredictedDaysPlayed != Game1.stats.DaysPlayed)
+            int currentSteps = (int)Game1.stats.StepsTaken;
+
+            // 仅计算当前步数的预测结果
+            PredictionResult newPrediction = PredictNextDayOutcomes(currentSteps);
+
+            // 如果状态发生变化（走路、机器变化、求雨、求婚等）
+            if (this.lastPredictedSteps != currentSteps || !newPrediction.Equals(this.currentPrediction))
             {
-                this.lastPredictedSteps = (int)Game1.stats.StepsTaken;
-                this.lastPredictedDaysPlayed = Game1.stats.DaysPlayed;
-                this.currentPrediction = PredictNextDayOutcomes(this.lastPredictedSteps);
+                this.lastPredictedSteps = currentSteps;
+                this.currentPrediction = newPrediction;
+                this.needsNewTargetSearch = true;
+
+                // 世界状态变化时，实时更新7天的天气预测！
+                UpdateFutureRainyDays();
             }
         }
 
@@ -402,19 +583,24 @@ namespace StepsTakenOnScreen
                 return;
             }
 
-            if (this.needsNewTargetSearch || (this.targetSearchCriteriaMet && (int)Game1.stats.StepsTaken > this.targetSearchResultSteps))
+            int currentSteps = (int)Game1.stats.StepsTaken;
+
+            if (this.needsNewTargetSearch || (this.targetSearchCriteriaMet && currentSteps > this.targetSearchResultSteps))
             {
                 this.targetSearchCriteriaMet = false;
-                int startSteps = (int)Game1.stats.StepsTaken;
+                this.needsNewTargetSearch = false;
+
                 for (int steps = 0; steps < this.Config.TargetStepsLimit; steps++)
                 {
-                    int futureSteps = startSteps + steps;
+                    int futureSteps = currentSteps + steps;
                     PredictionResult futurePrediction = PredictNextDayOutcomes(futureSteps);
 
                     bool luckMet = this.Config.TargetLuck == -0.101 || futurePrediction.DailyLuck >= this.Config.TargetLuck;
                     bool dishMet = string.IsNullOrEmpty(this.Config.TargetDish) || (this.targetDishIds.Contains(futurePrediction.DishOfTheDayId) && futurePrediction.DishOfTheDayAmount >= this.Config.TargetDishAmount);
                     bool gifterMet = string.IsNullOrEmpty(this.Config.TargetGifter) || this.targetGifterNames.Contains(futurePrediction.MailSenderName);
-                    bool stormMet = !this.Config.WantStorm || futurePrediction.WillBeStormyDayAfterTomorrow;
+
+                    // [修改] 适配新的字符串天气判断
+                    bool stormMet = !this.Config.WantStorm || futurePrediction.WeatherAfterTomorrow == "Storm";
 
                     if (luckMet && dishMet && gifterMet && stormMet)
                     {
@@ -426,63 +612,89 @@ namespace StepsTakenOnScreen
 
                 if (!this.targetSearchCriteriaMet)
                 {
-                    this.targetSearchResultSteps = startSteps + this.Config.TargetStepsLimit;
+                    this.targetSearchResultSteps = currentSteps + this.Config.TargetStepsLimit;
                 }
-
-                this.needsNewTargetSearch = false;
             }
         }
 
-        private string BuildPredictionDisplayString()
+        private List<IFormattedText> BuildPredictionDisplayBlocks()
         {
-            List<string> lines = new List<string>();
-            if (this.Config.DisplaySteps) lines.Add(this.Helper.Translation.Get("DisplaySteps") + ": " + (int)Game1.stats.StepsTaken);
-            if (this.Config.DisplayLuck) lines.Add(this.Helper.Translation.Get("DisplayLuck") + ": " + this.currentPrediction.DailyLuck);
-            if (this.Config.DisplayDish) { string dishName = TokenParser.ParseText(Game1.objectData[this.currentPrediction.DishOfTheDayId].DisplayName); lines.Add(this.Helper.Translation.Get("DisplayDish") + ": " + dishName + " (" + this.currentPrediction.DishOfTheDayAmount + ")"); }
-            if (this.Config.DisplayGift) { string gifterName = string.IsNullOrEmpty(this.currentPrediction.MailSenderName) ? "无" : Game1.getCharacterFromName(this.currentPrediction.MailSenderName).displayName; lines.Add(this.Helper.Translation.Get("DisplayGift") + ": " + gifterName); }
-            if (this.Config.DisplayWeather) 
+            List<IFormattedText> blocks = new List<IFormattedText>();
+
+            if (this.Config.DisplaySteps)
+                blocks.Add(new FormattedText($"{this.Helper.Translation.Get("Text_TotalSteps")}：{(int)Game1.stats.StepsTaken}"));
+
+            if (this.Config.DisplayDish)
             {
-                if (this.futureRainyDaysDisplay.Any())
-                {
-                    lines.Add(this.Helper.Translation.Get("DisplayWeather") + ": " + string.Join(", ", this.futureRainyDaysDisplay));
-                }
-                else
-                {
-                    lines.Add("未来7天无雨天");
-                }
+                string dishName = Game1.objectData.TryGetValue(this.currentPrediction.DishOfTheDayId, out var data) ? TokenParser.ParseText(data.DisplayName) : "???";
+                blocks.Add(new FormattedText($"\n{this.Helper.Translation.Get("Text_TomorrowDish")}：{dishName} ({this.currentPrediction.DishOfTheDayAmount})"));
             }
-            if (this.Config.DisplayThunder)
+
+            if (this.Config.DisplayGift)
             {
-                string label = "后天雷雨预测";
-                string resultText;
-                if (this.currentPrediction.IsRainyDayAfterTomorrow)
+                string gifterName = string.IsNullOrEmpty(this.currentPrediction.MailSenderName) ? this.Helper.Translation.Get("Text_None") : Game1.getCharacterFromName(this.currentPrediction.MailSenderName)?.displayName ?? this.currentPrediction.MailSenderName;
+                blocks.Add(new FormattedText($"\n{this.Helper.Translation.Get("Text_TomorrowGift")}：{gifterName}"));
+            }
+
+            if (this.Config.DisplayLuck)
+                blocks.Add(new FormattedText($"\n{this.Helper.Translation.Get("Text_TomorrowLuck")}：{this.currentPrediction.DailyLuck.ToString("F3")}"));
+
+            if (this.Config.DisplayWeather)
+            {
+                string rainDays = this.futureRainyDaysDisplay.Any() ? string.Join(", ", this.futureRainyDaysDisplay) : this.Helper.Translation.Get("Text_None");
+                blocks.Add(new FormattedText($"\n{this.Helper.Translation.Get("Text_Rainy7Days")}：{rainDays}"));
+            }
+
+            if (this.Config.DisplayStorm)
+            {
+                blocks.Add(new FormattedText($"\n{this.Helper.Translation.Get("Text_AftermorrowStorm")}："));
+
+                string w = this.currentPrediction.WeatherAfterTomorrow;
+
+                if (w == "Storm")
                 {
-                    resultText = this.currentPrediction.WillBeStormyDayAfterTomorrow ? "是" : "否";
+                    blocks.Add(new FormattedText($"{this.Helper.Translation.Get("Text_Stormy")}", Color.Red, true));
+                }
+                else if (w == "GreenRain")
+                {
+                    // [新增] 绿雨显示
+                    blocks.Add(new FormattedText($"{this.Helper.Translation.Get("Text_GreenRain")}", Color.LimeGreen, true));
+                }
+                else if (w == "Rain")
+                {
+                    blocks.Add(new FormattedText($"{this.Helper.Translation.Get("Text_Rainy")}"));
                 }
                 else
                 {
-                    resultText = "非雨天";
+                    // 包含 Sun, Wedding, Festival 等所有不下雨的情况
+                    blocks.Add(new FormattedText($"{this.Helper.Translation.Get("Text_NonRainy")}"));
                 }
-                lines.Add(label + ": " + resultText);
             }
 
             if (this.targetSearchResultSteps != -1)
             {
-                lines.Add("");
-                if (this.targetSearchCriteriaMet) lines.Add("目标达成所需步数: " + this.targetSearchResultSteps);
-                else lines.Add("在 " + this.targetSearchResultSteps + " 步内未找到目标");
-                lines.Add("搜索条件:");
-                if (this.Config.TargetLuck != -0.101) lines.Add("- 运气: " + this.Config.TargetLuck);
-                if (!string.IsNullOrEmpty(this.Config.TargetDish)) lines.Add("- 菜品: " + this.Config.TargetDish);
-                if (!string.IsNullOrEmpty(this.Config.TargetGifter)) lines.Add("- 送礼人: " + this.Config.TargetGifter);
-                if (this.Config.WantStorm) lines.Add("- 需要雷雨");
+                blocks.Add(new FormattedText($"\n------\n{this.Helper.Translation.Get("Text_SearchTarget")}："));
+
+                if (!string.IsNullOrEmpty(this.Config.TargetDish))
+                    blocks.Add(new FormattedText($"\n{this.Helper.Translation.Get("Text_TargetDish")}：{this.Config.TargetDish} ({this.Config.TargetDishAmount})"));
+
+                if (!string.IsNullOrEmpty(this.Config.TargetGifter))
+                    blocks.Add(new FormattedText($"\n{this.Helper.Translation.Get("Text_TargetGift")}：{this.Config.TargetGifter}"));
+
+                if (this.Config.TargetLuck != -0.101)
+                    blocks.Add(new FormattedText($"\n{this.Helper.Translation.Get("Text_TargetLuck")}：{this.Config.TargetLuck} ~ 0.1"));
+
+                if (this.Config.WantStorm)
+                    blocks.Add(new FormattedText($"\n{this.Helper.Translation.Get("Text_TargetStorm")}：{this.Helper.Translation.Get("Text_Yes")}"));
+
+                if (this.targetSearchCriteriaMet)
+                    blocks.Add(new FormattedText($"\n{this.Helper.Translation.Get("Text_TargetSteps")}：{this.targetSearchResultSteps}"));
+                else
+                    blocks.Add(new FormattedText($"\n{this.Helper.Translation.Get("Text_TargetNotFound")}"));
             }
-            return string.Join(Environment.NewLine, lines);
+
+            return blocks;
         }
-
-        #endregion
-
-        #region 辅助方法
 
         private void UpdateConfigDerivedVariables()
         {

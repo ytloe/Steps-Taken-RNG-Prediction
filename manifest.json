@@ -1,7 +1,7 @@
 {
   "Name": "Ytloe's Steps Taken RNG Prediction",
   "Author": "Ytloe",
-  "Version": "4.3.0",
+  "Version": "4.4.0",
   "Description": "完全重构了Blade的StepsTakenRNGPrediction，支持配置菜单和i18n以及更强的拓展性",
   "UniqueID": "Ytloe.StepsTakenOnScreen",
   "EntryDll": "StepsTakenOnScreen.dll",

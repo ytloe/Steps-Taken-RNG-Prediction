@@ -16,7 +16,7 @@ internal class ModConfig
 
     public bool DisplayWeather { get; set; } = true;
 
-    public bool DisplayThunder { get; set; } = false;
+    public bool DisplayStorm { get; set; } = false;
 
     public Point PositionOffset { get; set; } = new Point(300, 0);
 

@@ -1,11 +1,4 @@
 ﻿{
-  "DisplaySteps": "Steps Taken",
-  "DisplayLuck": "Luck Tomorrow",
-  "DisplayGift": "Mail Gift",
-  "DisplayDish": "Dish of the Day",
-  "DisplayWeather": "Rain for the next 7 days",
-  "DisplayThander": "Weather Aftermorrow",
-  "DisplaySearch": "Searching For",
   "ModEnabled": "Toggle Prediction Box Shortcut",
   "Config.ModEnabled.Tooltip": "Keyboard shortcut combination to control prediction box visibility",
   "HorizontalOffset": "Horizontal Offset (X)",
@@ -17,5 +10,27 @@
   "Config.DisplayGift": "Display mail sender prediction",
   "Config.DisplayDish": "Display special dish prediction",
   "Config.DisplayWeather": "Display rain for the next 7 days",
-  "Config.DisplayThander": "Display Thander prediction"
+  "Config.DisplayStorm": "Display Storm prediction",
+
+  "Text_TotalSteps": "Total Steps",
+  "Text_TomorrowDish": "Tomorrow's Dish",
+  "Text_TomorrowGift": "Tomorrow's Gift",
+  "Text_TomorrowLuck": "Tomorrow's Luck",
+  "Text_Rainy7Days": "Next 7 Rainy Days",
+  "Text_AftermorrowStorm": "Aftermorrow Storm",
+
+  "Text_None": "None",
+  "Text_NonRainy": "Non-Rainy",
+  "Text_Rainy": "Rainy",
+  "Text_Stormy": "Storm",
+  "Text_GreenRain": "Green Rain",
+  "Text_Yes": "Yes",
+
+  "Text_SearchTarget": "Search Target",
+  "Text_TargetDish": "Dish",
+  "Text_TargetGift": "Gift",
+  "Text_TargetLuck": "Luck Range",
+  "Text_TargetStorm": "Storm",
+  "Text_TargetSteps": "Target Steps",
+  "Text_TargetNotFound": "Target not found within step limit"
 }

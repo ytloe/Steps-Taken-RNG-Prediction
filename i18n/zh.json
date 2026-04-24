@@ -1,11 +1,4 @@
 {
-  "DisplaySteps": "总步数",
-  "DisplayLuck": "明天的运气",
-  "DisplayGift": "明天的邮礼对象",
-  "DisplayDish": "明天的特色菜",
-  "DisplayWeather": "未来7天的雨天",
-  "DisplayThunder": "后天是否雷雨",
-  "DisplaySearch": "Searching For？？",
   "ModEnabled": "开关预测框快捷键",
   "Config.ModEnabled.Tooltip": "控制预测框显示的快捷键组合",
   "HorizontalOffset": "水平偏移 (X)",
@@ -17,5 +10,27 @@
   "Config.DisplayGift": "显示邮件预测",
   "Config.DisplayDish": "显示特色菜预测",
   "Config.DisplayWeather": "显示未来7天的雨天",
-  "Config.DisplayThunder": "显示后天雷雨预测"
+  "Config.DisplayStorm": "显示后天雷雨预测",
+
+  "Text_TotalSteps": "行走总步数",
+  "Text_TomorrowDish": "明日的酒吧特色菜",
+  "Text_TomorrowGift": "明日的邮礼对象",
+  "Text_TomorrowLuck": "明日的每日运气",
+  "Text_Rainy7Days": "最近7日的雨天",
+  "Text_AftermorrowStorm": "后日的雷雨预测",
+
+  "Text_None": "无",
+  "Text_NonRainy": "非雨天",
+  "Text_Rainy": "雨天",
+  "Text_Stormy": "雷雨",
+  "Text_GreenRain": "绿雨",
+  "Text_Yes": "是",
+
+  "Text_SearchTarget": "搜索内容",
+  "Text_TargetDish": "特色菜",
+  "Text_TargetGift": "邮礼对象",
+  "Text_TargetLuck": "每日运气范围",
+  "Text_TargetStorm": "雷雨",
+  "Text_TargetSteps": "达成条件最近的总步数",
+  "Text_TargetNotFound": "当前步数限制内未找到目标"
 }
